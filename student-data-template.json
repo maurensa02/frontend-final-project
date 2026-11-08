@@ -1,0 +1,32 @@
+{
+  "students": [
+    {
+      "id": "STD001",
+      "studentNumber": "",
+      "fullName": "",
+      "studyProgram": "Informatika",
+      "faculty": "Fakultas Ilmu Komputer",
+      "institution": "Universitas Klabat",
+      "curriculum": "2024",
+      "currentSemester": 1,
+      "gpa": null,
+      "completedCredits": 0,
+      "status": "active"
+    }
+  ],
+  "studentCourses": [
+    {
+      "id": "SC001",
+      "studentId": "STD001",
+      "courseCode": "IFAP171",
+      "academicYear": "",
+      "semesterType": "odd",
+      "status": "completed",
+      "grade": null,
+      "creditsEarned": null,
+      "note": "Ganti dengan data akademik mahasiswa yang sebenarnya."
+    }
+  ],
+  "issueReports": [],
+  "academicPlan": []
+}
