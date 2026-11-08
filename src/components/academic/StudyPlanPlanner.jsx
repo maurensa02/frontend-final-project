@@ -17,31 +17,50 @@ import {
 } from "../../utils/creditCalculator";
 import { validateStudyPlan } from "../../services/studyPlanService";
 
-// Definisi 7 tab kategori katalog resmi
+// Definisi 13 tab kategori katalog resmi sesuai urutan kurikulum
 const CATEGORY_TABS = [
   { id: "all", label: "Semua" },
-  { id: "regular", label: "Reguler" },
+  { id: "sem1", label: "Semester 1" },
+  { id: "sem2", label: "Semester 2" },
+  { id: "sem3", label: "Semester 3" },
+  { id: "sem4", label: "Semester 4" },
+  { id: "sem5", label: "Semester 5" },
+  { id: "sem6", label: "Semester 6" },
+  { id: "sem7", label: "Semester 7" },
+  { id: "sem8", label: "Semester 8" },
   { id: "sem0", label: "Semester 0" },
   { id: "elective", label: "Elective" },
   { id: "mbkm", label: "MBKM / Studi Independen" },
   { id: "english", label: "Advanced English" },
-  { id: "unverified", label: "Perlu Verifikasi" },
 ];
 
 /**
  * Filter kategori katalog berdasarkan spesifikasi kurikulum:
  * - Semua: Seluruh 90 mata kuliah
- * - Reguler: Semester rekomendasi 1-8
- * - Semester 0: Semester rekomendasi 0
+ * - Semester 1 - 8: recommendedSemester sesuai tab
+ * - Semester 0: recommendedSemester === 0
  * - Elective: type === "Elective"
  * - MBKM / Studi Independen: Kode diawali "IFKM"
  * - Advanced English: Semester 9 dan type === "General"
- * - Perlu Verifikasi: verificationStatus === "needs_verification" atau type === null
  */
 function isCourseMatchingTab(course, tabId) {
   switch (tabId) {
-    case "regular":
-      return course.recommendedSemester >= 1 && course.recommendedSemester <= 8;
+    case "sem1":
+      return course.recommendedSemester === 1;
+    case "sem2":
+      return course.recommendedSemester === 2;
+    case "sem3":
+      return course.recommendedSemester === 3;
+    case "sem4":
+      return course.recommendedSemester === 4;
+    case "sem5":
+      return course.recommendedSemester === 5;
+    case "sem6":
+      return course.recommendedSemester === 6;
+    case "sem7":
+      return course.recommendedSemester === 7;
+    case "sem8":
+      return course.recommendedSemester === 8;
     case "sem0":
       return course.recommendedSemester === 0;
     case "elective":
