@@ -28,9 +28,170 @@ import {
   query,
   orderBy,
 } from "firebase/firestore";
-import { db } from "../firebase/firebase";
+import { db } from "../firebase/firebase.js";
 
 // ─── PROFIL MAHASISWA ─────────────────────────────────────────────────────────
+
+/**
+ * Memeriksa apakah data profil mahasiswa sudah lengkap untuk personalisasi layanan.
+ * Kriteria lengkap:
+ * - Nama lengkap terisi
+ * - NIM terisi
+ * - Fakultas & Program studi terisi
+ * - Semester aktif terisi (1-14)
+ * - IPK terisi angka valid (0.00 - 4.00)
+ *
+ * @param {Object|null} profile Objek profil mahasiswa
+ * @returns {boolean} true jika profil telah lengkap
+ */
+export function isProfileComplete(profile) {
+  if (!profile) return false;
+  if (profile.isProfileCompleted === true) return true;
+
+  const hasName = Boolean(profile.fullName && String(profile.fullName).trim().length >= 2);
+  const hasNim = Boolean(profile.studentNumber && String(profile.studentNumber).trim().length >= 3);
+  const hasFaculty = Boolean(profile.faculty && String(profile.faculty).trim());
+  const hasProgram = Boolean(profile.studyProgram && String(profile.studyProgram).trim());
+  const hasSemester =
+    typeof profile.currentSemester === "number" &&
+    profile.currentSemester >= 1 &&
+    profile.currentSemester <= 14;
+  const hasGpa =
+    typeof profile.gpa === "number" &&
+    !isNaN(profile.gpa) &&
+    profile.gpa >= 0.0 &&
+    profile.gpa <= 4.0;
+
+  return hasName && hasNim && hasFaculty && hasProgram && hasSemester && hasGpa;
+}
+
+/**
+ * Memeriksa ketersediaan/keunikan NIM mahasiswa di Firestore.
+ * @param {string} nim Nomor Induk Mahasiswa
+ * @param {string} currentUid UID mahasiswa yang sedang login
+ * @returns {Promise<{ available: boolean, error?: string }>}
+ */
+export async function checkNimAvailability(nim, currentUid) {
+  if (!nim || !String(nim).trim()) {
+    return { available: false, error: "NIM wajib diisi." };
+  }
+  const cleanNim = String(nim).trim().toUpperCase();
+
+  try {
+    const nimRef = doc(db, "nims", cleanNim);
+    const snap = await getDoc(nimRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data.uid && data.uid !== currentUid) {
+        return {
+          available: false,
+          error: `NIM '${cleanNim}' sudah digunakan oleh mahasiswa lain.`,
+        };
+      }
+    }
+    return { available: true };
+  } catch (err) {
+    console.warn("[studentService] checkNimAvailability warning:", err);
+    // Jika ada kendala akses rules nims pada environment tertentu, jangan memblokir
+    return { available: true };
+  }
+}
+
+/**
+ * Menyimpan profil lengkap mahasiswa setelah registrasi / pengisian form.
+ * Melakukan validasi ketat, pengecekan keunikan NIM, dan pencatatan ke Firestore.
+ *
+ * @param {string} uid Firebase UID
+ * @param {Object} profileData
+ * @returns {Promise<{ success: boolean, profile?: Object, error?: string }>}
+ */
+export async function saveStudentProfile(uid, profileData = {}) {
+  if (!uid) {
+    return { success: false, error: "Pengguna tidak terautentikasi." };
+  }
+
+  const fullName = String(profileData.fullName || "").trim();
+  const studentNumber = String(profileData.studentNumber || "").trim().toUpperCase();
+  const email = String(profileData.email || "").trim();
+  const faculty = String(profileData.faculty || "").trim();
+  const studyProgram = String(profileData.studyProgram || "").trim();
+  const curriculum = String(profileData.curriculum || "").trim() || "2024";
+  const currentSemester = Number(profileData.currentSemester);
+  const gpa = Number(profileData.gpa);
+  const completedCredits = Number(profileData.completedCredits);
+  const status = profileData.status || "active";
+
+  // 1. Validasi Identitas
+  if (!fullName || fullName.length < 2) {
+    return { success: false, error: "Nama lengkap wajib diisi (minimal 2 karakter)." };
+  }
+  if (!studentNumber || studentNumber.length < 3) {
+    return { success: false, error: "NIM wajib diisi dengan benar." };
+  }
+
+  // 2. Validasi Informasi Akademik
+  if (!faculty) {
+    return { success: false, error: "Fakultas wajib diisi." };
+  }
+  if (!studyProgram) {
+    return { success: false, error: "Program studi wajib diisi." };
+  }
+  if (isNaN(currentSemester) || currentSemester < 1 || currentSemester > 14) {
+    return { success: false, error: "Semester harus berada dalam rentang 1 sampai 14." };
+  }
+
+  // 3. Validasi Informasi Perkuliahan
+  if (isNaN(gpa) || gpa < 0 || gpa > 4.0) {
+    return { success: false, error: "IPK harus berada dalam rentang 0.00 sampai 4.00." };
+  }
+  if (isNaN(completedCredits) || completedCredits < 0) {
+    return { success: false, error: "Total SKS harus bernilai angka 0 atau lebih." };
+  }
+
+  // 4. Validasi Keunikan NIM
+  const nimCheck = await checkNimAvailability(studentNumber, uid);
+  if (!nimCheck.available) {
+    return { success: false, error: nimCheck.error || "NIM sudah terdaftar." };
+  }
+
+  try {
+    // A. Catat ke koleksi indeks nims
+    try {
+      const nimRef = doc(db, "nims", studentNumber);
+      await setDoc(nimRef, {
+        uid,
+        studentNumber,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (nimErr) {
+      console.warn("[studentService] Gagal memperbarui indeks nims:", nimErr);
+    }
+
+    // B. Simpan data profil mahasiswa di users/{uid}
+    const userRef = doc(db, "users", uid);
+    const payload = {
+      fullName,
+      studentNumber,
+      email,
+      faculty,
+      studyProgram,
+      institution: "Universitas Klabat",
+      curriculum,
+      currentSemester,
+      gpa,
+      completedCredits,
+      status,
+      isProfileCompleted: true,
+      updatedAt: serverTimestamp(),
+    };
+
+    await setDoc(userRef, payload, { merge: true });
+    return { success: true, profile: { id: uid, ...payload } };
+  } catch (err) {
+    console.error("[studentService] saveStudentProfile error:", err);
+    return { success: false, error: err.message || "Gagal menyimpan data profil ke Firestore." };
+  }
+}
 
 /**
  * Mengambil dokumen profil mahasiswa dari Firestore.
