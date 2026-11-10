@@ -10,6 +10,12 @@ service cloud.firestore {
       }
     }
 
+    // Koleksi pemetaan NIM untuk memastikan keunikan NIM mahasiswa
+    match /nims/{nim} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && (request.resource.data.uid == request.auth.uid || resource.data.uid == request.auth.uid);
+    }
+
     // Master kurikulum: Mahasiswa yang terautentikasi dapat membaca data mata kuliah
     match /curriculum/{courseId} {
       allow read: if request.auth != null;

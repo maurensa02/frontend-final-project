@@ -16,7 +16,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  LayoutDashboard,
   BookCheck,
   CalendarCheck,
   AlertTriangle,
@@ -24,6 +23,7 @@ import {
   BookOpen,
   ArrowRight,
   RefreshCw,
+  Pencil,
 } from "lucide-react";
 
 import Sidebar from "../components/layout/Sidebar";
@@ -34,6 +34,7 @@ import CourseHistoryManager from "../components/academic/CourseHistoryManager";
 import StudyPlanPlanner from "../components/academic/StudyPlanPlanner";
 import AcademicIssuesHub from "../components/academic/AcademicIssuesHub";
 import Alert from "../components/common/Alert";
+import ProfileCompletionPage from "./ProfileCompletionPage";
 
 import {
   getStudentProfile,
@@ -43,6 +44,7 @@ import {
   deleteCourseHistoryRecord,
   getIssueReports,
   addIssueReport,
+  isProfileComplete,
 } from "../services/studentService";
 
 import {
@@ -84,6 +86,7 @@ export default function DashboardPage({ user, onLogout }) {
   // Navigasi
   const [activeNav, setActiveNav] = useState("dashboard");
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
 
   // Data mahasiswa dari Firestore
   const [studentProfile, setStudentProfile] = useState(null);
@@ -232,6 +235,7 @@ export default function DashboardPage({ user, onLogout }) {
             <StudentOverview
               studentProfile={studentProfile}
               userEmail={user?.email}
+              onEditProfile={() => setIsEditingProfile(true)}
             />
 
             {/* Statistik Akademik */}
@@ -287,21 +291,32 @@ export default function DashboardPage({ user, onLogout }) {
         return (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 mb-5">
-                <User className="w-5 h-5 text-blue-600" />
-                Profil Mahasiswa
-              </h2>
+              <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <User className="w-5 h-5 text-blue-600" />
+                  Profil Mahasiswa
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingProfile(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Ubah Data Profil
+                </button>
+              </div>
               <StudentOverview
                 studentProfile={studentProfile}
                 userEmail={user?.email}
+                onEditProfile={() => setIsEditingProfile(true)}
               />
               <div className="mt-5 p-4 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-800 flex items-start gap-2.5">
                 <BookOpen className="w-4 h-4 shrink-0 mt-0.5 text-blue-500" />
                 <div>
-                  <p className="font-semibold">Cara melengkapi profil:</p>
+                  <p className="font-semibold">Personalisasi Layanan Akademik:</p>
                   <p className="mt-1 text-blue-700 leading-relaxed">
-                    Profil akademik resmi (NIM, IPK, semester aktif) diisi oleh pihak akademik atau
-                    administrator program studi. Hubungi staf FIK jika data belum tersedia.
+                    Data profil digunakan sebagai dasar personalisasi batas SKS (IPK &ge; 3.35 berhak 23 SKS),
+                    simulasi KRS semester, dan rekomendasi studi akademik. Klik tombol &quot;Ubah Data Profil&quot; untuk memperbarui informasi Anda.
                   </p>
                 </div>
               </div>
@@ -317,11 +332,11 @@ export default function DashboardPage({ user, onLogout }) {
                 </div>
                 <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
                   <span className="text-xs text-slate-500">Program Studi</span>
-                  <span className="text-xs font-semibold text-slate-800">Informatika</span>
+                  <span className="text-xs font-semibold text-slate-800">{studentProfile?.studyProgram || "Informatika"}</span>
                 </div>
                 <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
                   <span className="text-xs text-slate-500">Kurikulum</span>
-                  <span className="text-xs font-semibold text-slate-800">2024 (151 SKS)</span>
+                  <span className="text-xs font-semibold text-slate-800">{studentProfile?.curriculum || "2024"} (151 SKS)</span>
                 </div>
                 <div className="flex items-center justify-between py-2.5">
                   <span className="text-xs text-slate-500">Institusi</span>
@@ -367,9 +382,55 @@ export default function DashboardPage({ user, onLogout }) {
     }
   }
 
+  // ── Pengecekan Kelengkapan Profil Mahasiswa ──────────────────────────────
+  const profileComplete = isProfileComplete(studentProfile);
+
+  // Jika data profil sedang dimuat pertama kali
+  if (isLoadingProfile && !studentProfile) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-600 font-medium text-sm">Memeriksa status profil mahasiswa...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Jika profil belum lengkap: arahkan langsung ke halaman Melengkapi Profil Mahasiswa
+  if (!isLoadingProfile && !profileComplete) {
+    return (
+      <ProfileCompletionPage
+        user={user}
+        studentProfile={studentProfile}
+        onProfileCompleted={(updated) => {
+          setStudentProfile(updated);
+        }}
+        onLogout={onLogout}
+      />
+    );
+  }
+
+  // Jika mahasiswa memilih mengubah profil dari menu/kartu profil
+  if (isEditingProfile) {
+    return (
+      <ProfileCompletionPage
+        user={user}
+        studentProfile={studentProfile}
+        isEditMode={true}
+        onProfileCompleted={(updated) => {
+          setStudentProfile(updated);
+          setIsEditingProfile(false);
+        }}
+        onCancel={() => setIsEditingProfile(false)}
+        onLogout={onLogout}
+      />
+    );
+  }
+
   // ── Loading Skeleton ─────────────────────────────────────────────────────
 
-  const isLoadingData = isLoadingProfile || isLoadingHistory;
+  const isLoadingData = isLoadingProfile || isLoadingHistory || isLoadingIssues;
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -382,7 +443,7 @@ export default function DashboardPage({ user, onLogout }) {
           setActiveNav(nav);
           setIsMobileSidebarOpen(false);
         }}
-        onLogout={() => {}} // logout dihandle di App.jsx via useAuth
+        onLogout={onLogout}
         isOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
       />
@@ -393,7 +454,7 @@ export default function DashboardPage({ user, onLogout }) {
         <TopNav
           user={user}
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
-          onLogout={null} // logout dihandle di Sidebar atau App.jsx
+          onLogout={onLogout}
         />
 
         {/* Area Konten */}
